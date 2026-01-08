@@ -104,8 +104,19 @@ function parseCVEData(cve) {
 function renderItem(container, itemData, iconClass = 'fa-clock', showDetails = true) {
     const { id, summary, date, score } = itemData;
     const item = document.createElement('a');
-    item.href = `https://cve.circl.lu/cve/${id}`;
-    item.target = "_blank";
+    
+    // For CVE items, add click handler for modal instead of external link
+    if (id.startsWith('CVE-')) {
+        item.href = '#';
+        item.onclick = (e) => {
+            e.preventDefault();
+            showCVEDetails(itemData);
+        };
+    } else {
+        item.href = `https://cve.circl.lu/cve/${id}`;
+        item.target = "_blank";
+    }
+    
     item.className = "list-group-item list-group-item-action";
 
     let badgeClass = 'badge-cvss-low';
@@ -131,7 +142,91 @@ function renderItem(container, itemData, iconClass = 'fa-clock', showDetails = t
     container.appendChild(item);
 }
 
-function renderCVEs(cves) {
+// Function to show CVE details in modal
+function showCVEDetails(cveData) {
+    const { id, summary, date, score } = cveData;
+    
+    // Get severity level and color
+    let severityLevel = 'Low';
+    let severityColor = 'success';
+    if (score >= 9.0) {
+        severityLevel = 'Critical';
+        severityColor = 'danger';
+    } else if (score >= 7.0) {
+        severityLevel = 'High';
+        severityColor = 'warning';
+    } else if (score >= 4.0) {
+        severityLevel = 'Medium';
+        severityColor = 'info';
+    }
+
+    const timeDisplay = date ? timeAgo(date) : 'Date Unknown';
+    const publishDate = date ? new Date(date).toLocaleDateString() : 'Unknown';
+
+    // Create modal HTML
+    const modalHTML = `
+        <div class="modal fade" id="cveModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content bg-dark border-secondary">
+                    <div class="modal-header bg-black border-secondary">
+                        <h5 class="modal-title text-info">
+                            <i class="fa-solid fa-bug me-2"></i>${id}
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <h6 class="text-muted mb-2">CVSS Score</h6>
+                                <span class="badge bg-${severityColor} fs-6">${score || 'N/A'}</span>
+                                <span class="text-${severityColor} ms-2 fw-bold">${severityLevel}</span>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-muted mb-2">Published Date</h6>
+                                <p class="text-light mb-0">${publishDate}</p>
+                                <small class="text-muted">${timeDisplay}</small>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <h6 class="text-muted mb-2">Description</h6>
+                            <p class="text-light">${summary}</p>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <h6 class="text-muted mb-2">CVE ID</h6>
+                            <code class="text-info">${id}</code>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-black border-secondary">
+                        <a href="https://cve.circl.lu/cve/${id}" target="_blank" class="btn btn-info">
+                            <i class="fa-solid fa-external-link-alt me-1"></i>View Full Details
+                        </a>
+                        <a href="https://nvd.nist.gov/vuln/detail/${id}" target="_blank" class="btn btn-secondary">
+                            <i class="fa-solid fa-database me-1"></i>NVD Database
+                        </a>
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Remove existing modal if present
+    const existingModal = document.getElementById('cveModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    // Add modal to page
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('cveModal'));
+    modal.show();
+}
+
+function renderCVEs(cves, malwareData = []) {
     const cveContainer = document.getElementById('cve-list');
     const malContainer = document.getElementById('mal-list');
 
@@ -149,17 +244,131 @@ function renderCVEs(cves) {
         })
         .map(rawCve => parseCVEData(rawCve));
 
-    // Split into CVE and MAL
-    const cveItems = validItems.filter(item => !item.id.startsWith('MAL-'))
-        .sort((a, b) => (b.score || 0) - (a.score || 0));
-    const malItems = validItems.filter(item => item.id.startsWith('MAL-')).reverse();
+    // Only get CVE items (no MAL filtering needed since CVE API doesn't have MAL data)
+    const cveItems = validItems.sort((a, b) => (b.score || 0) - (a.score || 0));
 
+    // Calculate CVE statistics
+    const stats = calculateCVEStats(cveItems);
+    updateCVEStats(stats);
+    updateCVEChart(stats);
+
+    // Render CVE items
     cveItems.slice(0, 30).forEach(item => renderItem(cveContainer, item, 'fa-bug', true));
-    malItems.slice(0, 30).forEach(item => renderItem(malContainer, item, 'fa-spider', false));
+
+    // Render MAL items (from malware data)
+    if (malwareData && malwareData.length > 0) {
+        malwareData.slice(0, 30).forEach(item => {
+            const malItem = {
+                id: `MAL-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                summary: item.title,
+                date: item.pubDate,
+                score: null
+            };
+            renderItem(malContainer, malItem, 'fa-spider', false);
+        });
+    }
 
     // Empty states
     if (cveItems.length === 0) cveContainer.innerHTML = '<div class="p-3 text-center text-muted">No recent CVEs found.</div>';
-    if (malItems.length === 0) malContainer.innerHTML = '<div class="p-3 text-center text-muted">No recent MAL entries found.</div>';
+    if (!malwareData || malwareData.length === 0) malContainer.innerHTML = '<div class="p-3 text-center text-muted">No recent malware data found.</div>';
+}
+
+function calculateCVEStats(cveItems) {
+    const stats = {
+        total: cveItems.length,
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+        unknown: 0
+    };
+
+    cveItems.forEach(cve => {
+        const score = cve.score;
+        if (score === null || score === undefined) {
+            stats.unknown++;
+        } else if (score >= 9.0) {
+            stats.critical++;
+        } else if (score >= 7.0) {
+            stats.high++;
+        } else if (score >= 4.0) {
+            stats.medium++;
+        } else {
+            stats.low++;
+        }
+    });
+
+    return stats;
+}
+
+function updateCVEStats(stats) {
+    document.getElementById('total-cves').textContent = stats.total;
+    document.getElementById('critical-cves').textContent = stats.critical;
+    document.getElementById('high-cves').textContent = stats.high;
+    document.getElementById('medium-cves').textContent = stats.medium;
+    document.getElementById('low-cves').textContent = stats.low;
+}
+
+let cveChart = null;
+
+function updateCVEChart(stats) {
+    const ctx = document.getElementById('cve-chart').getContext('2d');
+    
+    // Destroy existing chart if it exists
+    if (cveChart) {
+        cveChart.destroy();
+    }
+
+    const data = [stats.critical, stats.high, stats.medium, stats.low, stats.unknown];
+    const labels = ['Critical', 'High', 'Medium', 'Low', 'Unknown'];
+    const colors = ['#dc3545', '#ffc107', '#17a2b8', '#28a745', '#6c757d'];
+
+    // Filter out zero values
+    const filteredData = [];
+    const filteredLabels = [];
+    const filteredColors = [];
+    
+    data.forEach((value, index) => {
+        if (value > 0) {
+            filteredData.push(value);
+            filteredLabels.push(labels[index]);
+            filteredColors.push(colors[index]);
+        }
+    });
+
+    cveChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: filteredLabels,
+            datasets: [{
+                data: filteredData,
+                backgroundColor: filteredColors,
+                borderWidth: 1,
+                borderColor: '#343a40'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    backgroundColor: '#212529',
+                    titleColor: '#ffffff',
+                    bodyColor: '#ffffff',
+                    borderColor: '#6c757d',
+                    borderWidth: 1
+                }
+            },
+            elements: {
+                arc: {
+                    borderWidth: 2
+                }
+            }
+        }
+    });
 }
 
 function renderNews(newsItems) {
@@ -243,7 +452,7 @@ async function init() {
         api.getMalwareBazaar()
     ]);
 
-    renderCVEs(cves);
+    renderCVEs(cves, malware);
     renderNews(news);
     renderHN(hn);
     renderMalware(malware);

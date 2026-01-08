@@ -6,12 +6,12 @@ export class API {
 
     async getCVEs() {
         try {
-            // using allorigins as a proxy to bypass CORS
-            const response = await fetch(`${this.corsProxy}${encodeURIComponent('https://cve.circl.lu/api/last')}`);
+            // Using api.codetabs.com proxy to bypass CORS
+            const response = await fetch(`https://api.codetabs.com/v1/proxy?quest=https://cve.circl.lu/api/last`);
             if (!response.ok) throw new Error('Network response was not ok');
             const data = await response.json();
-            // allorigins returns the actual response in the 'contents' field as a string
-            return JSON.parse(data.contents);
+            // codetabs returns the data directly
+            return data;
         } catch (error) {
             console.error("Error fetching CVEs:", error);
             return [];
