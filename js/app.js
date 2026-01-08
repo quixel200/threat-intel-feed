@@ -82,7 +82,7 @@ function parseCVEData(cve) {
             }
         }
     }
-    if (!summary) summary = "No description available.";
+    if (!summary) summary = "Rejected CVE";
 
     // Date
     let date = cve.Modified || cve.Published;
@@ -101,7 +101,7 @@ function parseCVEData(cve) {
 }
 
 // Rendering Functions
-function renderItem(container, itemData, iconClass = 'fa-clock') {
+function renderItem(container, itemData, iconClass = 'fa-clock', showDetails = true) {
     const { id, summary, date, score } = itemData;
     const item = document.createElement('a');
     item.href = `https://cve.circl.lu/cve/${id}`;
@@ -117,13 +117,16 @@ function renderItem(container, itemData, iconClass = 'fa-clock') {
 
     const timeDisplay = date ? timeAgo(date) : 'Date Unknown';
 
+    const scoreBadge = showDetails ? `<span class="badge ${badgeClass} text-mono">${score || 'N/A'}</span>` : '';
+    const dateElement = showDetails ? `<small class="text-muted"><i class="far ${iconClass} me-1"></i>${timeDisplay}</small>` : '';
+
     item.innerHTML = `
         <div class="d-flex w-100 justify-content-between mb-1">
             <h6 class="mb-0 text-info text-mono">${id}</h6>
-            <span class="badge ${badgeClass} text-mono">${score || 'N/A'}</span>
+            ${scoreBadge}
         </div>
         <p class="mb-1 small text-secondary">${truncate(summary, 120)}</p>
-        <small class="text-muted"><i class="far ${iconClass} me-1"></i>${timeDisplay}</small>
+        ${dateElement}
     `;
     container.appendChild(item);
 }
@@ -147,11 +150,12 @@ function renderCVEs(cves) {
         .map(rawCve => parseCVEData(rawCve));
 
     // Split into CVE and MAL
-    const cveItems = validItems.filter(item => !item.id.startsWith('MAL-'));
-    const malItems = validItems.filter(item => item.id.startsWith('MAL-'));
+    const cveItems = validItems.filter(item => !item.id.startsWith('MAL-'))
+        .sort((a, b) => (b.score || 0) - (a.score || 0));
+    const malItems = validItems.filter(item => item.id.startsWith('MAL-')).reverse();
 
-    cveItems.slice(0, 30).forEach(item => renderItem(cveContainer, item, 'fa-bug'));
-    malItems.slice(0, 30).forEach(item => renderItem(malContainer, item, 'fa-spider'));
+    cveItems.slice(0, 30).forEach(item => renderItem(cveContainer, item, 'fa-bug', true));
+    malItems.slice(0, 30).forEach(item => renderItem(malContainer, item, 'fa-spider', false));
 
     // Empty states
     if (cveItems.length === 0) cveContainer.innerHTML = '<div class="p-3 text-center text-muted">No recent CVEs found.</div>';
@@ -246,12 +250,6 @@ async function init() {
 
     updateTime();
 
-    // Auto-Refresh every 5 minutes
-    setInterval(async () => {
-        const cves = await api.getCVEs();
-        renderCVEs(cves);
-        updateTime();
-    }, 300000); // 5 mins
 }
 
 // Start
