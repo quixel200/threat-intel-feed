@@ -129,7 +129,7 @@ function renderItem(container, itemData, iconClass = 'fa-clock', showDetails = t
     const timeDisplay = date ? timeAgo(date) : 'Date Unknown';
 
     const scoreBadge = showDetails ? `<span class="badge ${badgeClass} text-mono">${score || 'N/A'}</span>` : '';
-    const dateElement = showDetails ? `<small class="text-muted"><i class="far ${iconClass} me-1"></i>${timeDisplay}</small>` : '';
+    const dateElement = showDetails ? `<small class="text-muted">${timeDisplay}</small>` : '';
 
     item.innerHTML = `
         <div class="d-flex w-100 justify-content-between mb-1">
@@ -204,6 +204,9 @@ function showCVEDetails(cveData) {
                         </a>
                         <a href="https://nvd.nist.gov/vuln/detail/${id}" target="_blank" class="btn btn-secondary">
                             <i class="fa-solid fa-database me-1"></i>NVD Database
+                        </a>
+                        <a href="https://www.google.com/search?q=${id} exploit" target="_blank" class="btn btn-warning">
+                            <i class="fa-solid fa-magnifying-glass me-1"></i>Search Web
                         </a>
                         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
                     </div>
